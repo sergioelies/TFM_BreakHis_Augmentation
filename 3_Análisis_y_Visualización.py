@@ -140,7 +140,7 @@ def overlay_heatmap(img_np, heatmap_tensor):
 # 3. FUNCIÓN: GRAFICO ROC AUC
 # ==============================================================================
 def plot_roc_curves():
-    print("\n📊 Generando Gráfico ROC AUC...")
+    print("\nGenerando Gráfico ROC AUC...")
     try:
         df_metrics = pd.read_csv(
                 METRICS_FILE,
@@ -186,7 +186,7 @@ def plot_roc_curves():
         plt.close()
         
     except Exception as e:
-        print(f"❌ Error generando ROC: {e}")
+        print(f"Error generando ROC: {e}")
 
 # ==============================================================================
 # 4. FUNCIÓN: GRAD-CAM (Muestras Específicas)
@@ -205,7 +205,7 @@ def visualize_gradcam_targets(df_test, models_loaded):
         # 1. Localizar paciente
         row = df_test[df_test["PatientID"] == str(pid)]
         if len(row) == 0:
-            print(f"⚠️ Paciente {pid} no encontrado en Test Set.")
+            print(f"Paciente {pid} no encontrado en Test Set.")
             continue
         
         row = row.iloc[0]
@@ -278,10 +278,10 @@ if __name__ == "__main__":
                 m.load_state_dict(torch.load(path_pth, map_location=DEVICE))
                 m.eval()
                 models_loaded[name] = m
-                print(f"✅ {name} cargado.")
-            except Exception as e: print(f"❌ Error {name}: {e}")
+                print(f"{name} cargado.")
+            except Exception as e: print(f"Error {name}: {e}")
         else:
-            print(f"⚠️ No encontrado: {path_pth}")
+            print(f"No encontrado: {path_pth}")
 
     if models_loaded:
         # 3. PREPARAR TEST SET (Recuperar índices exactos)
@@ -301,4 +301,4 @@ if __name__ == "__main__":
         # generate_full_html_report(df_test, models_loaded) 
         
     else:
-        print("⚠️ No se cargaron modelos, saltando Grad-CAM.")
+        print("No se cargaron modelos, saltando Grad-CAM.")
