@@ -21,7 +21,7 @@ from sklearn.metrics import roc_curve, auc
 # ==============================================================================
 # 1. CONFIGURACIÓN Y RUTAS
 # ==============================================================================
-DATA_PATH    = "./data/breakhis_npz"
+DATA_PATH    = "./data"
 RESULTS_PATH = "./results"
 MODELS_PATH  = "./models" 
 
