@@ -137,7 +137,7 @@ def overlay_heatmap(img_np, heatmap_tensor):
     return np.clip(0.6 * img_np + 0.4 * heatmap, 0, 1)
 
 # ==============================================================================
-# 3. FUNCIÓN: GRAFICO ROC AUC (Estilo Profesional)
+# 3. FUNCIÓN: GRAFICO ROC AUC
 # ==============================================================================
 def plot_roc_curves():
     print("\n📊 Generando Gráfico ROC AUC...")
