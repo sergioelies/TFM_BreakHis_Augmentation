@@ -15,19 +15,19 @@ El objetivo principal de este estudio es cuantificar el impacto de técnicas de 
 El proyecto se divide en tres módulos secuenciales:
 
 ### 1. Exploración y Metodología
-*  **`1_Análisis_Exploratorio.ipynb`**
+*  **`1_Analisis_Exploratorio.ipynb`**
     * Análisis descriptivo del dataset y desbalance de clases.
     * Validación de la estrategia de particionado por paciente.
     * **Visualización de aumentos:** Generación de ejemplos visuales de las transformaciones aplicadas.
 
 ### 2. Entrenamiento
-*  **`2_Entrenamiento_y_Evaluación.py`**
+*  **`2_Entrenamiento_y_Evaluacion.py`**
     * Script maestro de entrenamiento reproducible.
     * Implementa el flujo completo: *Random Search* $\rightarrow$ *Validación Cruzada Interna* $\rightarrow$ *Test Final*.
     * Gestión de experimentos para los escenarios **None**, **Basic** y **Advanced**.
 
 ### 3. Resultados e Interpretabilidad
-*  **`3_Análisis_y_Visualización.py`**
+*  **`3_Analisis_y_Visualizacion.py`**
     * Generación de métricas finales y curvas **ROC-AUC** comparativas.
     * **Grad-CAM:** Generación de mapas de calor para validar la atención del modelo en regiones de interés biológico.
 
