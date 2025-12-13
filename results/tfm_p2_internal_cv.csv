@@ -1,0 +1,10 @@
+Scenario,Mean_AUC,HP
+Advanced,0.906210786053235,"{'lr': 0.0002, 'weight_decay': 0.0001, 'head_hidden': 512, 'dropout': 0.5, 'scenario': 'Advanced', 'val_auc': 0.9498152709359606}"
+Advanced,0.9113286046418513,"{'lr': 0.001, 'weight_decay': 0.0001, 'head_hidden': 512, 'dropout': 0.7, 'scenario': 'Advanced', 'val_auc': 0.9490840517241379}"
+Advanced,0.9065388780574487,"{'lr': 0.001, 'weight_decay': 0.001, 'head_hidden': 512, 'dropout': 0.3, 'scenario': 'Advanced', 'val_auc': 0.9479679802955665}"
+Basic,0.911217014601608,"{'lr': 0.0005, 'weight_decay': 0.001, 'head_hidden': 128, 'dropout': 0.3, 'scenario': 'Basic', 'val_auc': 0.9456973522167488}"
+Basic,0.9077832121459751,"{'lr': 0.0005, 'weight_decay': 0.001, 'head_hidden': 512, 'dropout': 0.7, 'scenario': 'Basic', 'val_auc': 0.9444658251231528}"
+Basic,0.9041052322652208,"{'lr': 0.0005, 'weight_decay': 0.0001, 'head_hidden': 512, 'dropout': 0.5, 'scenario': 'Basic', 'val_auc': 0.942503078817734}"
+None,0.9118696722669828,"{'lr': 0.001, 'weight_decay': 0.001, 'head_hidden': 512, 'dropout': 0.7, 'scenario': 'None', 'val_auc': 0.9417333743842364}"
+None,0.9109983166747085,"{'lr': 0.001, 'weight_decay': 0.0001, 'head_hidden': 512, 'dropout': 0.5, 'scenario': 'None', 'val_auc': 0.9376924261083743}"
+None,0.9079766118927516,"{'lr': 0.001, 'weight_decay': 0.001, 'head_hidden': 256, 'dropout': 0.5, 'scenario': 'None', 'val_auc': 0.9353448275862069}"
