@@ -23,7 +23,7 @@ from sklearn.model_selection import StratifiedGroupKFold, GroupShuffleSplit
 from sklearn.metrics import roc_curve, auc, confusion_matrix, roc_auc_score
 from sklearn.utils import resample
 
-path = "./data/breakhis_npz"
+path = "./data"
 files = [f for f in os.listdir(path) if f.endswith(".npz")]
 
 rows = []
