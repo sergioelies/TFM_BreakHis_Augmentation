@@ -42,7 +42,6 @@ df = pd.DataFrame(rows, columns=["TumorType","Subtype","PatientID","NumImages"])
 gss = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=3)
 
 # 2. Generamos índices usando los grupos
-# Observa que pasamos 'groups=df["PatientID"]'
 train_val_idx, test_idx = next(gss.split(df, df["TumorType"], groups=df["PatientID"]))
 
 train_val = df.iloc[train_val_idx]
@@ -175,6 +174,15 @@ def build_image_index(df_split, base_path):
             samples.append((full_path, tile_idx, label))
     return samples
 
+# ✅ NUEVO: PatientID por tile, en el MISMO orden que build_image_index
+def build_patient_tile_index(df_split):
+    patient_ids = []
+    for _, row in df_split.iterrows():
+        pid = row.PatientID
+        num_imgs = int(row.NumImages)
+        patient_ids.extend([pid] * num_imgs)
+    return np.array(patient_ids)
+
 class BreakHisTilesDataset(Dataset):
     def __init__(self, samples, transform=None):
         self.samples = samples
@@ -216,6 +224,76 @@ def evaluate_model(loader, model):
             all_targets.extend(targets.numpy())
     try: return roc_auc_score(all_targets, all_probs)
     except: return 0.5
+
+
+# ==================================================================================
+# ✅ NUEVO: Cluster bootstrap por paciente (IC95% percentil, sin mean)
+# ==================================================================================
+def compute_cluster_bootstrap_ci_by_patient(y_true, y_prob, patient_ids, threshold, n_boot=1000, seed=42, stratified=True):
+    rng = np.random.default_rng(seed)
+
+    y_true = np.asarray(y_true).astype(int)
+    y_prob = np.asarray(y_prob).astype(float)
+    patient_ids = np.asarray(patient_ids)
+
+    # patient -> índices
+    pat_to_idx = {}
+    for i, p in enumerate(patient_ids):
+        pat_to_idx.setdefault(p, []).append(i)
+    for p in pat_to_idx:
+        pat_to_idx[p] = np.array(pat_to_idx[p], dtype=int)
+
+    unique_patients = np.array(list(pat_to_idx.keys()))
+    pat_label = {p: int(y_true[pat_to_idx[p][0]]) for p in unique_patients}
+
+    if stratified:
+        pats0 = np.array([p for p in unique_patients if pat_label[p] == 0])
+        pats1 = np.array([p for p in unique_patients if pat_label[p] == 1])
+        n0, n1 = len(pats0), len(pats1)
+
+    boot = {k: [] for k in ["auc","sens","spec","ppv","npv","acc"]}
+
+    for _ in range(n_boot):
+        if stratified:
+            sampled = np.concatenate([
+                rng.choice(pats0, size=n0, replace=True),
+                rng.choice(pats1, size=n1, replace=True)
+            ])
+        else:
+            sampled = rng.choice(unique_patients, size=len(unique_patients), replace=True)
+
+        idx = np.concatenate([pat_to_idx[p] for p in sampled], axis=0)
+
+        yt = y_true[idx]
+        yp = y_prob[idx]
+        yp_bin = (yp >= threshold).astype(int)
+
+        tn, fp, fn, tp = confusion_matrix(yt, yp_bin, labels=[0,1]).ravel()
+
+        sens = tp/(tp+fn) if (tp+fn)>0 else np.nan
+        spec = tn/(tn+fp) if (tn+fp)>0 else np.nan
+        ppv  = tp/(tp+fp) if (tp+fp)>0 else np.nan
+        npv  = tn/(tn+fn) if (tn+fn)>0 else np.nan
+        acc  = (tp+tn)/len(yt) if len(yt)>0 else np.nan
+
+        if np.unique(yt).size == 2:
+            boot["auc"].append(roc_auc_score(yt, yp))
+
+        boot["sens"].append(sens)
+        boot["spec"].append(spec)
+        boot["ppv"].append(ppv)
+        boot["npv"].append(npv)
+        boot["acc"].append(acc)
+
+    def pct_ci(arr):
+        arr = np.array(arr, dtype=float)
+        arr = arr[~np.isnan(arr)]
+        if arr.size == 0:
+            return (np.nan, np.nan)
+        return (float(np.percentile(arr, 2.5)), float(np.percentile(arr, 97.5)))
+
+    return {k: pct_ci(v) for k, v in boot.items()}
+
 
 # ==================================================================================
 # 2. CONFIGURACIÓN DE EJECUCIÓN (DEBUG vs REAL)
@@ -379,7 +457,7 @@ print(df_winners[["Scenario", "Mean_AUC"]])
 
 
 # ==================================================================================
-# 5. FASE 3: EVALUACIÓN EN TEST (BOOTSTRAP + YOUDEN)
+# 5. FASE 3: EVALUACIÓN EN TEST (YOUDEN EN VAL-int + CLUSTER BOOTSTRAP x PACIENTE)
 # ==================================================================================
 print(f"\n{'='*40}\n INICIANDO FASE 3: TEST FINAL \n{'='*40}")
 
@@ -389,32 +467,20 @@ df_train_final = pd.concat([df_train_phase1, df_val_phase1]).reset_index(drop=Tr
 df_test_final = test 
 
 test_final_idx = build_image_index(df_test_final, path)
+# ✅ NUEVO: PatientIDs por tile en el MISMO orden que test_final_idx / dl_test
+test_patient_ids = build_patient_tile_index(df_test_final)
+
 POS_WEIGHT_FINAL = torch.tensor(n_neg / n_pos, dtype=torch.float32).to(device)
 
 final_predictions = {}
 test_metrics = []
-
-def compute_bootstrap_ci(y_true, y_pred, threshold, n_boot=1000):
-    stats = {'sens':[], 'spec':[], 'ppv':[], 'npv':[]}
-    y_pred_bin = (y_pred >= threshold).astype(int)
-    for _ in range(n_boot):
-        indices = resample(np.arange(len(y_true)), replace=True)
-        yt, yp = y_true[indices], y_pred_bin[indices]
-        tn, fp, fn, tp = confusion_matrix(yt, yp, labels=[0,1]).ravel()
-        stats['sens'].append(tp/(tp+fn) if (tp+fn)>0 else 0)
-        stats['spec'].append(tn/(tn+fp) if (tn+fp)>0 else 0)
-        stats['ppv'].append(tp/(tp+fp) if (tp+fp)>0 else 0)
-        stats['npv'].append(tn/(tn+fn) if (tn+fn)>0 else 0)
-    res = {}
-    for k, v in stats.items(): res[k] = (np.mean(v), np.percentile(v, 2.5), np.percentile(v, 97.5))
-    return res
 
 for _, row in df_winners.iterrows():
     scenario = row["Scenario"]
     hp = row["HP"]
     print(f"\n🚀 Entrenando Final: {scenario}...")
     
-    # Split interno 90/10 para Early Stopping
+    # Split interno 90/10 para Early Stopping (esto ES tu VAL-int final)
     gss = GroupShuffleSplit(n_splits=1, test_size=0.10, random_state=SEED)
     t_idx, v_idx = next(gss.split(df_train_final, groups=df_train_final["PatientID"]))
     
@@ -455,36 +521,122 @@ for _, row in df_winners.iterrows():
         
         if stopper(auc_v): break
 
-    # Inferencia en Test
+    # Cargar mejor checkpoint si no es debug
     if not DEBUG_MODE:
         model.load_state_dict(torch.load(f"final_model_{scenario}.pth"))
     
     model.eval()
+
+    # ------------------------------------------------------------
+    # ✅ 1) YOUDEN en VAL-int (dl_v)  [ANTES estaba en TEST: corregido]
+    # ------------------------------------------------------------
+    y_true_val, y_prob_val = [], []
+    with torch.no_grad():
+        for imgs, targets in dl_v:
+            imgs = imgs.to(device)
+            outs = model(imgs).squeeze(1)
+            probs = torch.sigmoid(outs).cpu().numpy()
+            y_prob_val.extend(probs)
+            y_true_val.extend(targets.numpy())
+
+    y_true_val = np.array(y_true_val)
+    y_prob_val = np.array(y_prob_val)
+
+    fpr_v, tpr_v, ths_v = roc_curve(y_true_val, y_prob_val)
+    best_thresh = ths_v[np.argmax(tpr_v - fpr_v)]  # Youden SOLO en VAL-int
+
+    # ------------------------------------------------------------
+    # ✅ 2) Inferencia en TEST (intocable) + métricas punto
+    # ------------------------------------------------------------
     y_true, y_prob = [], []
     with torch.no_grad():
         for imgs, targets in dl_test:
             imgs = imgs.to(device)
             outs = model(imgs).squeeze(1)
             probs = torch.sigmoid(outs).cpu().numpy()
-            y_prob.extend(probs); y_true.extend(targets.numpy())
-            
-    y_true, y_prob = np.array(y_true), np.array(y_prob)
-    final_predictions[scenario] = {"y_true": y_true, "y_prob": y_prob}
-    
-    # Métricas
-    fpr, tpr, ths = roc_curve(y_true, y_prob)
+            y_prob.extend(probs)
+            y_true.extend(targets.numpy())
+
+    y_true = np.array(y_true)
+    y_prob = np.array(y_prob)
+
+    # Guardar predicciones crudas
+    final_predictions[scenario] = {
+        "y_true": y_true,
+        "y_prob": y_prob,
+        "patient_ids": test_patient_ids
+    }
+
+    # AUC test (tile-level, como tu pipeline)
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
     roc_auc = auc(fpr, tpr)
-    best_thresh = ths[np.argmax(tpr - fpr)] # Youden
-    
-    print(f"   -> AUC Test: {roc_auc:.4f} | Youden Thresh: {best_thresh:.4f}")
-    
+
+    # Confusión + métricas a umbral fijo (Youden de VAL-int)
+    y_pred_bin = (y_prob >= best_thresh).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred_bin, labels=[0,1]).ravel()
+
+    sens = tp/(tp+fn) if (tp+fn)>0 else np.nan
+    spec = tn/(tn+fp) if (tn+fp)>0 else np.nan
+    ppv  = tp/(tp+fp) if (tp+fp)>0 else np.nan
+    npv  = tn/(tn+fn) if (tn+fn)>0 else np.nan
+    acc_ = (tp+tn)/len(y_true) if len(y_true)>0 else np.nan
+
+    print(f"   -> AUC Test: {roc_auc:.4f} | Youden(VAL-int): {best_thresh:.4f} | Acc: {acc_:.4f}")
+
+    # ------------------------------------------------------------
+    # ✅ 3) IC 95% con CLUSTER BOOTSTRAP x PACIENTE (percentil)
+    # ------------------------------------------------------------
     if not DEBUG_MODE:
-        print("   -> Bootstraping...")
-        cis = compute_bootstrap_ci(y_true, y_prob, best_thresh)
+        print("   -> Cluster bootstrap por paciente...")
+        ci = compute_cluster_bootstrap_ci_by_patient(
+            y_true=y_true,
+            y_prob=y_prob,
+            patient_ids=test_patient_ids,
+            threshold=best_thresh,
+            n_boot=1000,
+            seed=42,
+            stratified=True
+        )
+
         test_metrics.append({
-            "Scenario": scenario, "AUC": roc_auc, "Thresh": best_thresh,
-            "Sens": cis['sens'], "Spec": cis['spec'], "PPV": cis['ppv'], "NPV": cis['npv']
+            "Scenario": scenario,
+
+            "AUC": roc_auc,
+            "AUC_CI_low": ci["auc"][0],
+            "AUC_CI_high": ci["auc"][1],
+
+            "Thresh_VALint_Youden": float(best_thresh),
+
+            "Sens": sens,
+            "Sens_CI_low": ci["sens"][0],
+            "Sens_CI_high": ci["sens"][1],
+
+            "Spec": spec,
+            "Spec_CI_low": ci["spec"][0],
+            "Spec_CI_high": ci["spec"][1],
+
+            "PPV": ppv,
+            "PPV_CI_low": ci["ppv"][0],
+            "PPV_CI_high": ci["ppv"][1],
+
+            "NPV": npv,
+            "NPV_CI_low": ci["npv"][0],
+            "NPV_CI_high": ci["npv"][1],
+
+            "Acc": acc_,
+            "Acc_CI_low": ci["acc"][0],
+            "Acc_CI_high": ci["acc"][1],
+
+            # ✅ Confusion matrix (para quitarlo del 3.py)
+            "TN": int(tn),
+            "FP": int(fp),
+            "FN": int(fn),
+            "TP": int(tp),
+
+            "N_tiles_test": int(len(y_true)),
+            "N_patients_test": int(len(np.unique(test_patient_ids)))
         })
+
 
 # ==================================================================================
 # 6. GUARDADO DE RESULTADOS
@@ -498,10 +650,11 @@ if not DEBUG_MODE:
     # Tabla Fase 2 (CV)
     df_cv.to_csv("tfm_p2_internal_cv.csv", index=False)
     
-    # Tabla Fase 3 (Test Metrics)
+    # Tabla Fase 3 (Test Metrics)  ✅ ahora incluye confusión + acc + CI por paciente
     pd.DataFrame(test_metrics).to_csv("tfm_test_metrics.csv", index=False)
     
     # Predicciones Crudas (Numpy)
+    # (mantengo tu guardado para no tocar más, pero ahora incluye patient_ids)
     np.save("tfm_test_predictions.npy", final_predictions)
     
     print("✅ Todo guardado: .csv, .npy y .pth listos para descargar.")
