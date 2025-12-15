@@ -69,7 +69,7 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 seed_everything(SEED)
-print(f"✅ Entorno listo. Dispositivo: {device} | Seed: {SEED}")
+print(f"Entorno listo. Dispositivo: {device} | Seed: {SEED}")
 
 # ==================================================================================
 # 1. CLASES AUXILIARES (EarlyStopping, Augmentations, Dataset)
@@ -173,8 +173,7 @@ def build_image_index(df_split, base_path):
         for tile_idx in range(num_imgs):
             samples.append((full_path, tile_idx, label))
     return samples
-
-# ✅ NUEVO: PatientID por tile, en el MISMO orden que build_image_index
+    
 def build_patient_tile_index(df_split):
     patient_ids = []
     for _, row in df_split.iterrows():
@@ -225,10 +224,6 @@ def evaluate_model(loader, model):
     try: return roc_auc_score(all_targets, all_probs)
     except: return 0.5
 
-
-# ==================================================================================
-# ✅ NUEVO: Cluster bootstrap por paciente (IC95% percentil, sin mean)
-# ==================================================================================
 def compute_cluster_bootstrap_ci_by_patient(y_true, y_prob, patient_ids, threshold, n_boot=1000, seed=42, stratified=True):
     rng = np.random.default_rng(seed)
 
@@ -298,14 +293,14 @@ def compute_cluster_bootstrap_ci_by_patient(y_true, y_prob, patient_ids, thresho
 # ==================================================================================
 # 2. CONFIGURACIÓN DE EJECUCIÓN (DEBUG vs REAL)
 # ==================================================================================
-# 🔴 INTERRUPTOR 
-DEBUG_MODE = False  # <--- CAMBIAR A 'FALSE' PARA EL ENTRENAMIENTO DEFINITIVO
+# INTERRUPTOR 
+DEBUG_MODE = False  # <- 'FALSE' PARA EL ENTRENAMIENTO DEFINITIVO
 
 if DEBUG_MODE:
-    print("\n⚠️ ATENCIÓN: MODO DEBUG ACTIVADO")
+    print("\nATENCIÓN: MODO DEBUG ACTIVADO")
     print("   - Usando subset muy pequeño.")
     print("   - Pocas épocas/trials.")
-    print("   - 🚫 NO SE GUARDARÁN ARCHIVOS EN DISCO.")
+    print("   - NO SE GUARDARÁN ARCHIVOS EN DISCO.")
     
     # Subset rápido
     train_subset = train.sample(n=15, random_state=SEED) 
@@ -318,10 +313,10 @@ if DEBUG_MODE:
     PATIENCE_CV = 2
     K_FOLDS = 2
 else:
-    print("\n🚀 MODO REAL ACTIVADO")
+    print("\nMODO REAL ACTIVADO")
     print("   - Usando dataset completo.")
     print("   - Configuración completa.")
-    print("   - ✅ SE GUARDARÁN MODELOS Y RESULTADOS.")
+    print("   - SE GUARDARÁN MODELOS Y RESULTADOS.")
     
     df_train_phase1, df_val_phase1 = train, val
     
@@ -391,7 +386,7 @@ for scenario in SCENARIOS:
 
 df_rs = pd.DataFrame(rs_results)
 df_top3 = df_rs.groupby("scenario").apply(lambda x: x.nlargest(3, 'val_auc')).reset_index(drop=True)
-print("\n🏆 TOP 3 CANDIDATOS SELECCIONADOS:")
+print("\nTOP 3 CANDIDATOS SELECCIONADOS:")
 print(df_top3[["scenario", "val_auc", "lr", "head_hidden"]])
 
 
@@ -411,7 +406,7 @@ for idx, cand in df_top3.iterrows():
     scenario = cand["scenario"]
     hp = cand.to_dict()
     cand_id = f"{scenario}_Cand{idx}"
-    print(f"\n🔶 Evaluando: {cand_id} (lr={hp['lr']}, hidden={hp['head_hidden']})")
+    print(f"\nEvaluando: {cand_id} (lr={hp['lr']}, hidden={hp['head_hidden']})")
     
     fold_aucs = []
     for fold, (t_idx, v_idx) in enumerate(sgkf.split(df_full, y_vals, groups=groups)):
@@ -467,7 +462,6 @@ df_train_final = pd.concat([df_train_phase1, df_val_phase1]).reset_index(drop=Tr
 df_test_final = test 
 
 test_final_idx = build_image_index(df_test_final, path)
-# ✅ NUEVO: PatientIDs por tile en el MISMO orden que test_final_idx / dl_test
 test_patient_ids = build_patient_tile_index(df_test_final)
 
 POS_WEIGHT_FINAL = torch.tensor(n_neg / n_pos, dtype=torch.float32).to(device)
@@ -478,7 +472,7 @@ test_metrics = []
 for _, row in df_winners.iterrows():
     scenario = row["Scenario"]
     hp = row["HP"]
-    print(f"\n🚀 Entrenando Final: {scenario}...")
+    print(f"\nEntrenando Final: {scenario}...")
     
     # Split interno 90/10 para Early Stopping (esto ES tu VAL-int final)
     gss = GroupShuffleSplit(n_splits=1, test_size=0.10, random_state=SEED)
@@ -526,10 +520,6 @@ for _, row in df_winners.iterrows():
         model.load_state_dict(torch.load(f"final_model_{scenario}.pth"))
     
     model.eval()
-
-    # ------------------------------------------------------------
-    # ✅ 1) YOUDEN en VAL-int (dl_v)  [ANTES estaba en TEST: corregido]
-    # ------------------------------------------------------------
     y_true_val, y_prob_val = [], []
     with torch.no_grad():
         for imgs, targets in dl_v:
@@ -545,9 +535,6 @@ for _, row in df_winners.iterrows():
     fpr_v, tpr_v, ths_v = roc_curve(y_true_val, y_prob_val)
     best_thresh = ths_v[np.argmax(tpr_v - fpr_v)]  # Youden SOLO en VAL-int
 
-    # ------------------------------------------------------------
-    # ✅ 2) Inferencia en TEST (intocable) + métricas punto
-    # ------------------------------------------------------------
     y_true, y_prob = [], []
     with torch.no_grad():
         for imgs, targets in dl_test:
@@ -583,9 +570,6 @@ for _, row in df_winners.iterrows():
 
     print(f"   -> AUC Test: {roc_auc:.4f} | Youden(VAL-int): {best_thresh:.4f} | Acc: {acc_:.4f}")
 
-    # ------------------------------------------------------------
-    # ✅ 3) IC 95% con CLUSTER BOOTSTRAP x PACIENTE (percentil)
-    # ------------------------------------------------------------
     if not DEBUG_MODE:
         print("   -> Cluster bootstrap por paciente...")
         ci = compute_cluster_bootstrap_ci_by_patient(
@@ -627,7 +611,6 @@ for _, row in df_winners.iterrows():
             "Acc_CI_low": ci["acc"][0],
             "Acc_CI_high": ci["acc"][1],
 
-            # ✅ Confusion matrix (para quitarlo del 3.py)
             "TN": int(tn),
             "FP": int(fp),
             "FN": int(fn),
@@ -650,13 +633,13 @@ if not DEBUG_MODE:
     # Tabla Fase 2 (CV)
     df_cv.to_csv("tfm_p2_internal_cv.csv", index=False)
     
-    # Tabla Fase 3 (Test Metrics)  ✅ ahora incluye confusión + acc + CI por paciente
+    # Tabla Fase 3 (Test Metrics)
     pd.DataFrame(test_metrics).to_csv("tfm_test_metrics.csv", index=False)
     
     # Predicciones Crudas (Numpy)
     # (mantengo tu guardado para no tocar más, pero ahora incluye patient_ids)
     np.save("tfm_test_predictions.npy", final_predictions)
     
-    print("✅ Todo guardado: .csv, .npy y .pth listos para descargar.")
+    print("Todo guardado: .csv, .npy y .pth listos para descargar.")
 else:
-    print("\n🛑 MODO DEBUG: No se han guardado archivos.")
+    print("\nMODO DEBUG: No se han guardado archivos.")
