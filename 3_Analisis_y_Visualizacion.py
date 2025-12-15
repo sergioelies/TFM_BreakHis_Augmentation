@@ -140,7 +140,6 @@ def load_metrics_and_thresholds():
     dfm = pd.read_csv(metrics_path, dtype={'Scenario': str})
     dfm["Scenario"] = dfm["Scenario"].astype(str).str.strip()
 
-    # Umbral correcto (Youden en VAL-int) guardado por 2.py
     if "Thresh_VALint_Youden" not in dfm.columns:
         raise ValueError("El CSV no tiene la columna 'Thresh_VALint_Youden'. ¿Seguro que es el generado por el 2.py corregido?")
 
@@ -192,19 +191,20 @@ def plot_roc_curves(df_metrics, predictions):
 
     out_path = os.path.join(RESULTS_PATH, "fig_roc_auc.png")
     plt.savefig(out_path, bbox_inches='tight')
-    print(f"✅ Gráfico guardado en: {out_path}")
+    print(f"Gráfico guardado en: {out_path}")
     plt.close()
 
 # ==============================================================================
 # 5. FUNCIÓN: GRAD-CAM (Muestras Específicas)
 # ==============================================================================
 def visualize_gradcam_targets(df_test, models_loaded, thresholds):
-    print("\n🔍 Generando visualizaciones Grad-CAM para objetivos seleccionados...")
+    print("\nGenerando visualizaciones Grad-CAM para objetivos seleccionados...")
 
     TARGETS = [
-        ("14926",   2), ("16875",  16), ("21998CD",   1),
-        ("21998CD", 31), ("5694",   12), ("13418DE",  1),
-        ("16448",  12), ("2523",   16),
+        ("12312", 12), ("14926", 2), ("16448", 2), 
+        ("21998CD", 1), ("13200", 8), ("12312", 28),
+        ("12312", 5), ("19854C", 0), ("19854C", 3),
+        ("16875", 16), ("14926", 4), ("21998CD", 33)
     ]
 
     for pid, idx in TARGETS:
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     if not os.path.exists(RESULTS_PATH):
         os.makedirs(RESULTS_PATH)
 
-    # 1) Cargar métricas + umbrales correctos (Youden en VAL-int)
+    # 1) Cargar métricas + umbrales
     df_metrics, thresholds = load_metrics_and_thresholds()
 
     # 2) Cargar predicciones (para ROC)
@@ -281,7 +281,7 @@ if __name__ == "__main__":
     # 3) ROC AUC
     plot_roc_curves(df_metrics, predictions)
 
-    # 4) Cargar modelos (para Grad-CAM) - head_hidden inferido del checkpoint
+    # 4) Cargar modelos (para Grad-CAM)
     print("\nCargando modelos para inferencia...")
     models_loaded = {}
 
