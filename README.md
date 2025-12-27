@@ -46,15 +46,15 @@ El proyecto se organiza en tres etapas (ejecución recomendada en orden):
 - **`2_Entrenamiento_y_Validacion.py`**
   - Pipeline completo reproducible:
     - *Random Search* (15 configuraciones por escenario)
-    - Validación cruzada interna por paciente (*GroupKFold / StratifiedGroupKFold*, k=3)
-    - Entrenamiento final y evaluación en prueba externa (intocable durante el diseño)
+    - Validación cruzada interna por paciente (StratifiedGroupKFold*, k=3)
+    - Entrenamiento final y evaluación en prueba externa 
   - Escenarios: **None**, **Basic**, **Advanced**
   - Exporta métricas y predicciones para análisis posterior.
 
 ### 3) Análisis y visualización (ROC + Grad-CAM)
 - **`3_Analisis_y_Visualizacion.py`**
   - Curvas ROC-AUC comparativas.
-  - Generación de visualizaciones y paneles Grad-CAM.
+  - Generación de visualizaciones y Grad-CAM.
 
 ---
 
@@ -65,8 +65,6 @@ Contiene los datos preprocesados en formato **`.npz`**, con **un archivo por pac
 
 - Formato de nombre: `tumortype_subtype_patientID.npz`
 - Cada archivo agrupa todos los *tiles* del paciente, lo que facilita el **particionado por grupos** (evita *data leakage*).
-
-> **Importante:** Estos ficheros son derivados del dataset BreakHis. Revisa los términos de uso del dataset original antes de redistribuir o reutilizar datos.
 
 ### `/models`
 Pesos de los modelos finales por escenario (PyTorch `.pth`):
